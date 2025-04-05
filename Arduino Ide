@@ -1,0 +1,44 @@
+#include <Servo.h>
+
+Servo servoX;  // X-axis Servo
+Servo servoY;  // Y-axis Servo
+
+int posX = 90; // Default position for X
+int posY = 90; // Default position for Y
+
+void setup() {
+    Serial.begin(9600);  // Start Serial Communication
+    servoX.attach(9);    // Connect X-axis servo to Pin 9
+    servoY.attach(10);   // Connect Y-axis servo to Pin 10
+
+    // Set servos to center position
+    servoX.write(posX);
+    servoY.write(posY);
+}
+
+void loop() {
+    if (Serial.available() > 0) {
+        String data = Serial.readStringUntil('\n');  // Read incoming data
+        int commaIndex = data.indexOf(','); // Find the comma separator
+
+        if (commaIndex > 0) {
+            // Extract X and Y values
+            int newX = data.substring(0, commaIndex).toInt();
+            int newY = data.substring(commaIndex + 1).toInt();
+
+            // Limit the range (0-180 degrees)
+            posX = constrain(newX, 0, 180);
+            posY = constrain(newY, 0, 180);
+
+            // Move servos
+            servoX.write(posX);
+            servoY.write(posY);
+
+            // Print for debugging
+            Serial.print("X: ");
+            Serial.print(posX);
+            Serial.print(" | Y: ");
+            Serial.println(posY);
+        }
+    }
+}
