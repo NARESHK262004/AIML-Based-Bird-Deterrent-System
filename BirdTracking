@@ -1,0 +1,71 @@
+import cv2
+import pyfirmata
+import numpy as np
+from ultralytics import YOLO
+
+# Camera setup
+cap = cv2.VideoCapture(0)
+ws, hs = 1280, 720
+cap.set(3, ws)
+cap.set(4, hs)
+
+if not cap.isOpened():
+    print("Camera couldn't Access!!!")
+    exit()
+
+# Arduino setup
+port = "COM11"
+board = pyfirmata.Arduino(port)
+servo_pinX = board.get_pin('d:9:s')
+servo_pinY = board.get_pin('d:10:s')
+
+# Load YOLOv5 model (bird detection)
+model = YOLO('yolov5s.pt')  # Make sure yolov5s is available; includes 'bird' in COCO
+
+servoPos = [90, 90]
+
+while True:
+    success, img = cap.read()
+    if not success:
+        continue
+
+    results = model(img, stream=True)
+
+    bird_detected = False
+    for r in results:
+        for box in r.boxes:
+            cls = int(box.cls[0])
+            if model.names[cls] == "bird":
+                bird_detected = True
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                fx, fy = (x1 + x2) // 2, (y1 + y2) // 2
+
+                # Servo mapping
+                servoX = np.interp(fx, [0, ws], [180, 0])
+                servoY = np.interp(fy, [0, hs], [180, 0])
+                servoX = np.clip(servoX, 0, 180)
+                servoY = np.clip(servoY, 0, 180)
+
+                servoPos[0] = servoX
+                servoPos[1] = servoY
+
+                # Drawing tracking visuals
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.circle(img, (fx, fy), 10, (0, 0, 255), cv2.FILLED)
+                cv2.putText(img, "BIRD LOCKED", (850, 50), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
+
+    if not bird_detected:
+        cv2.putText(img, "NO BIRD", (880, 50), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3)
+        cv2.circle(img, (640, 360), 15, (0, 0, 255), cv2.FILLED)
+        cv2.line(img, (0, 360), (ws, 360), (0, 0, 0), 2)
+        cv2.line(img, (640, hs), (640, 0), (0, 0, 0), 2)
+
+    # Write servo angles
+    servo_pinX.write(servoPos[0])
+    servo_pinY.write(servoPos[1])
+
+    # Display servo angle and frame
+    cv2.putText(img, f'Servo X: {int(servoPos[0])} deg', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2)
+    cv2.putText(img, f'Servo Y: {int(servoPos[1])} deg', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2)
+    cv2.imshow("Bird Tracking", img)
+    cv2.waitKey(1)
